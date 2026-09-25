@@ -12,3 +12,10 @@ def group_by_condition(
     Returns:
         dict: keys are identifiers of samples, values are lists of measurements.
     """
+    result = {}
+    for well, condition in plate_map.items():
+        if well in intensities:
+            if condition not in result:
+                result[condition] = []
+            result[condition].append(float(intensities[well]))
+    return result
