@@ -1,6 +1,6 @@
 import pytest
 
-from src.plate_analysis import grouping
+from src.plate_analysis import utils
 
 @pytest.fixture
 def plate_map():
@@ -106,5 +106,21 @@ def expected() -> dict[str, list[float]]:
 
 
 def test_group_by_condition(plate_map, intensities, expected):
-    observed = grouping.group_by_condition(intensities, plate_map)
+    observed = utils.group_by_condition(intensities, plate_map)
+    assert observed == expected
+
+
+
+def test_normalise_to_min_max():
+    data = {
+        "Condition1": [1, 2, 3],
+        "Condition2": [4, 5, 6],
+        "Condition3": [7, 8, 9],
+    }
+    expected = {
+        "Condition1": [0.0, 0.125, 0.25],
+        "Condition2": [0.375, 0.5, 0.625],
+        "Condition3": [0.75, 0.875, 1.0],
+    }
+    observed = utils.normalise_to_min_max(data)
     assert observed == expected
