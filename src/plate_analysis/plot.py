@@ -14,6 +14,7 @@ medianprops = {
 
 def box_plot_experiments(
     experiments_data: list[tuple[entities.ExperimentConfig, dict[str, list[float]]]],
+    statistical_results: dict | None = None,
     save_individual: bool = False,
     output_dir: pathlib.Path = pathlib.Path("plots"),
 ) -> None:
@@ -30,7 +31,7 @@ def box_plot_experiments(
         n_experiments,
         figsize=(5 * n_experiments, 8),
         squeeze=False,
-        sharey=True,
+        sharey=False,
     )
 
     axes = axes.flatten()
@@ -55,6 +56,17 @@ def box_plot_experiments(
                 condition_order=experiment.condition_order,
                 controls=experiment.controls,
             )
+
+            if statistical_results is not None:
+                result = statistical_results.get(experiment.name)
+
+                if result is not None:
+                    annotate_statistics(
+                        ax=ax,
+                        experiment=experiment,
+                        data=data,
+                        comparisons=result["comparisons"],
+                    )
             individual_ax.set_title(experiment.name)
             individual_fig.tight_layout()
             filename = "".join(
@@ -91,8 +103,11 @@ def box_plot_conditions(
 
     plot_data = {labels[condition]: values for condition, values in data.items()}
 
-    plot_labels = list(plot_data.keys())
-    values = list(plot_data.values())
+    plot_labels = (
+        condition_order if condition_order is not None else list(plot_data.keys())
+    )
+
+    values = [plot_data[label] for label in plot_labels]
 
     ax.set_axisbelow(True)
     ax.grid(
@@ -170,3 +185,99 @@ def _generate_colours(labels: list[str], controls: list[str] = []) -> dict[str, 
             colour_index += 1
 
     return colours
+
+
+def add_pvalue_bracket(
+    ax: plt.Axes,
+    x1: int,
+    x2: int,
+    y: float,
+    p_value: float,
+    height: float,
+) -> None:
+
+    ax.plot(
+        [x1, x1, x2, x2],
+        [y, y + height, y + height, y],
+        color="black",
+        linewidth=1,
+        clip_on=False,
+    )
+
+    ax.text(
+        (x1 + x2) / 2,
+        y + height,
+        f"q = {p_value:.3g}",
+        ha="center",
+        va="bottom",
+        fontsize=9,
+    )
+
+
+def annotate_statistics(
+    ax: plt.Axes,
+    experiment: entities.ExperimentConfig,
+    data: dict[str, list[float]],
+    comparisons: dict,
+) -> None:
+
+    order = experiment.condition_order
+
+    all_values = np.concatenate(
+        [np.asarray(values, dtype=float) for values in data.values()]
+    )
+
+    all_values = all_values[np.isfinite(all_values)]
+
+    if len(all_values) == 0:
+        return
+
+    data_min = float(np.min(all_values))
+    data_max = float(np.max(all_values))
+
+    span = max(data_max - data_min, 0.1)
+
+    height = 0.04 * span
+    spacing = 0.14 * span
+
+    bracket_index = 0
+
+    for condition in experiment.experimental_conditions:
+        if condition not in comparisons:
+            continue
+
+        for control_type, control_name in (
+            ("negative_control", experiment.negative_control),
+            ("specificity_control", experiment.specificity_control),
+        ):
+            if control_name is None:
+                continue
+
+            comparison = comparisons[condition].get(control_type)
+
+            if comparison is None:
+                continue
+
+            p_value = comparison.get(
+                "adjusted_p_value",
+                comparison["p_value"],
+            )
+
+            x1 = order.index(condition) + 1
+            x2 = order.index(control_name) + 1
+
+            y = data_max + spacing * (bracket_index + 1)
+
+            add_pvalue_bracket(
+                ax=ax,
+                x1=x1,
+                x2=x2,
+                y=y,
+                p_value=p_value,
+                height=height,
+            )
+
+            bracket_index += 1
+
+    if bracket_index:
+        ax.set_ylim(top=data_max + spacing * (bracket_index + 2))

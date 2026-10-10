@@ -1,3 +1,5 @@
 matplotlib
 openpyxl
 pytest
+scipy
+statsmodels
