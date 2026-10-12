@@ -1,10 +1,19 @@
 from experiments.inf_1209 import RUN_1209
+from experiments.inf_0710 import RUN_0710
+from experiments.inf_0810 import RUN_0810
+from experiments.inf_0910 import RUN_0910
+
 from plate_analysis import analysis, plot
 
 
 def main():
 
-    RUNS = [RUN_1209]
+    RUNS = [
+        # RUN_1209
+        # RUN_0710,
+        # RUN_0810,
+        RUN_0910,
+    ]
 
     experiments_data = []
 
@@ -27,6 +36,18 @@ def main():
                     f"BH-adjusted p = {comparison['adjusted_p_value']:.4g}, "
                     f"significant = {comparison['significant']}"
                 )
+        for (candidate_a, candidate_b), comparison in result[
+            "candidate_comparisons"
+        ].items():
+
+            print(
+                f"{candidate_a} vs {candidate_b}: "
+                f"{comparison['test']}, "
+                f"mean difference = {comparison['mean_difference']:.3f}, "
+                f"p = {comparison['p_value']:.4g}, "
+                f"BH-adjusted p = {comparison['adjusted_p_value']:.4g}, "
+                f"significant = {comparison['significant']}"
+            )
 
     plot.box_plot_experiments(
         experiments_data,

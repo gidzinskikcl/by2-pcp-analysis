@@ -2,6 +2,8 @@ import numpy as np
 
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
+from itertools import combinations
+
 
 def descriptive_stats(
     grouped_data: dict[str, list[float]],
@@ -35,10 +37,37 @@ def descriptive_stats(
 
     return stats
 
+    # Shapiro-Wilk normality tests
+
+
+# A constant sample cannot meaningfully be assessed for normality.
+def shapiro_p(values) -> float:
+    if len(values) < 3 or np.ptp(values) == 0:
+        return np.nan
+    return float(stats.shapiro(values).pvalue)
+
+
+def adjust_p_values(
+    p_values: list[float],
+    alpha: float = 0.05,
+) -> tuple[list[float], list[bool]]:
+
+    if not p_values:
+        return [], []
+
+    significant, adjusted, _, _ = multipletests(
+        p_values,
+        alpha=alpha,
+        method="fdr_bh",
+    )
+
+    return adjusted.tolist(), significant.tolist()
+
 
 def compare_conditions(
     experimental: list[float],
     control: list[float],
+    test: str = "welch",
     alpha_normality: float = 0.05,
     min_wells_welsch: int = 9,
 ) -> dict[str, float]:
@@ -66,13 +95,6 @@ def compare_conditions(
     median_difference = float(np.median(x) - np.median(y))
     mean_difference = float(np.mean(x) - np.mean(y))
 
-    # Shapiro-Wilk normality tests
-    # A constant sample cannot meaningfully be assessed for normality.
-    def shapiro_p(values):
-        if len(values) < 3 or np.ptp(values) == 0:
-            return np.nan
-        return float(stats.shapiro(values).pvalue)
-
     p_normality_x = shapiro_p(x)
     p_normality_y = shapiro_p(y)
 
@@ -85,21 +107,39 @@ def compare_conditions(
         and p_normality_y > alpha_normality
     )
 
-    if normal:
-        test = "welch"
+    # if normal:
+    #     test = "welch"
+    #     score = stats.ttest_ind(
+    #         x,
+    #         y,
+    #         equal_var=False,
+    #         alternative="less",
+    #     )
+    # else:
+    #     test = "mann_whitneyu"
+    #     score = stats.mannwhitneyu(
+    #         x,
+    #         y,
+    #         alternative="less",
+    #     )
+
+    if test == "welch":
         score = stats.ttest_ind(
             x,
             y,
             equal_var=False,
             alternative="less",
         )
-    else:
-        test = "mann_whitney"
-        score = stats.mann_whitneyu(
+
+    elif test == "mann_whitneyu":
+        score = stats.mannwhitneyu(
             x,
             y,
             alternative="less",
         )
+
+    else:
+        raise ValueError(f"Unknown statistical test: {test}")
 
     result = {
         "n_experimental": len(x),
@@ -116,18 +156,37 @@ def compare_conditions(
     return result
 
 
-def adjust_p_values(
-    p_values: list[float],
-    alpha: float = 0.05,
-) -> tuple[list[float], list[bool]]:
+def compare_candidates(
+    data: dict[str, list[float]],
+    candidates: list[str],
+) -> dict[str, dict]:
 
-    if not p_values:
-        return [], []
+    comparisons = {}
 
-    significant, adjusted, _, _ = multipletests(
-        p_values,
-        alpha=alpha,
-        method="fdr_bh",
-    )
+    for candidate_a, candidate_b in combinations(candidates, 2):
 
-    return adjusted.tolist(), significant.tolist()
+        x = np.asarray(data[candidate_a], dtype=float)
+        y = np.asarray(data[candidate_b], dtype=float)
+
+        x = x[np.isfinite(x)]
+        y = y[np.isfinite(y)]
+
+        if len(x) < 3 or len(y) < 3:
+            raise ValueError("At least 3 valid wells required per candidate")
+
+        score = stats.ttest_ind(
+            x,
+            y,
+            equal_var=False,
+            alternative="two-sided",
+        )
+
+        comparisons[(candidate_a, candidate_b)] = {
+            "test": "welch",
+            "statistic": float(score.statistic),
+            "p_value": float(score.pvalue),
+            "mean_difference": float(np.mean(x) - np.mean(y)),
+            "median_difference": float(np.median(x) - np.median(y)),
+        }
+
+    return comparisons

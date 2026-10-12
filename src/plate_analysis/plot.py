@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
-from matplotlib.colors import to_rgba
+from matplotlib.colors import to_rgba, ListedColormap
+
 import numpy as np
 
 import pathlib
@@ -47,6 +48,20 @@ def box_plot_experiments(
 
         ax.set_title(experiment.name)
 
+        result = (
+            statistical_results.get(experiment.name)
+            if statistical_results is not None
+            else None
+        )
+
+        if result is not None:
+            annotate_statistics(
+                ax=ax,
+                experiment=experiment,
+                data=data,
+                comparisons=result["comparisons"],
+            )
+
         if save_individual:
             individual_fig, individual_ax = plt.subplots(figsize=(6, 8))
 
@@ -57,17 +72,16 @@ def box_plot_experiments(
                 controls=experiment.controls,
             )
 
-            if statistical_results is not None:
-                result = statistical_results.get(experiment.name)
-
-                if result is not None:
-                    annotate_statistics(
-                        ax=ax,
-                        experiment=experiment,
-                        data=data,
-                        comparisons=result["comparisons"],
-                    )
             individual_ax.set_title(experiment.name)
+
+            if result is not None:
+                annotate_statistics(
+                    ax=individual_ax,
+                    experiment=experiment,
+                    data=data,
+                    comparisons=result["comparisons"],
+                )
+
             individual_fig.tight_layout()
             filename = "".join(
                 c if c.isalnum() or c in "-_" else "_" for c in experiment.name
@@ -168,6 +182,77 @@ def box_plot_conditions(
             alpha=0.8,
             zorder=3,
         )
+
+
+# def plot_significance_matrix(
+#     ax: plt.Axes,
+#     comparisons: dict,
+#     candidates: list[str],
+# ) -> None:
+
+#     n = len(candidates)
+#     matrix = np.full((n, n), np.nan)
+
+#     for i, candidate_a in enumerate(candidates):
+#         for j, candidate_b in enumerate(candidates):
+#             if j <= i:
+#                 continue
+
+#             comparison = comparisons.get((candidate_a, candidate_b))
+
+#             if comparison is None:
+#                 comparison = comparisons.get((candidate_b, candidate_a))
+
+#             if comparison is None:
+#                 continue
+
+#             p = comparison["adjusted_p_value"]
+#             matrix[i, j] = 1 if p <= 0.05 else 0
+
+#             if p <= 0.001:
+#                 symbol = "***"
+#             elif p <= 0.01:
+#                 symbol = "**"
+#             elif p <= 0.05:
+#                 symbol = "*"
+#             else:
+#                 symbol = "ns"
+
+#             ax.text(
+#                 j, i, symbol,
+#                 ha="center",
+#                 va="center",
+#                 fontsize=10,
+#                 fontweight="bold" if p <= 0.05 else "normal",
+#             )
+
+#     cmap = ListedColormap(["#E0E0E0", "#8ECAE6"])
+#     cmap.set_bad(color="white")
+
+#     ax.imshow(
+#         np.ma.masked_invalid(matrix),
+#         cmap=cmap,
+#         vmin=0,
+#         vmax=1,
+#         aspect="equal",
+#     )
+
+#     short_labels = [
+#         candidate.split(" + ")[0].replace("Rx_", "")
+#         for candidate in candidates
+#     ]
+
+#     ax.set_xticks(range(n), short_labels)
+#     ax.set_yticks(range(n), short_labels)
+
+#     ax.xaxis.tick_top()
+#     ax.tick_params(length=0)
+
+#     for spine in ax.spines.values():
+#         spine.set_visible(False)
+
+#     ax.set_xlim(-0.5, n - 0.5)
+#     ax.set_ylim(n - 0.5, -0.5)
 
 
 def _generate_colours(labels: list[str], controls: list[str] = []) -> dict[str, str]:

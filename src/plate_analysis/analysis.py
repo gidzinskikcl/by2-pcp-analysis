@@ -60,37 +60,50 @@ def analyse_run(
 
 
 def analyse_statistics(
-    experiments_data,
+    experiments_data: list[tuple[entities.ExperimentConfig, dict[str, list[float]]]],
 ):
     results = {}
 
     for experiment, data in experiments_data:
+
         descriptive = statistics.descriptive_stats(data)
-
         comparisons = {}
+        candidate_comparisons = {}
 
-        for condition in experiment.experimental_conditions:
-            comparisons[condition] = {}
+        has_negative = experiment.negative_control is not None
+        has_specificity = experiment.specificity_control is not None
 
-            if experiment.negative_control is not None:
-                comparisons[condition]["negative_control"] = (
-                    statistics.compare_conditions(
-                        data[condition],
-                        data[experiment.negative_control],
+        if has_negative or has_specificity:
+
+            for condition in experiment.experimental_conditions:
+                comparisons[condition] = {}
+
+                if has_negative:
+                    comparisons[condition]["negative_control"] = (
+                        statistics.compare_conditions(
+                            data[condition],
+                            data[experiment.negative_control],
+                        )
                     )
-                )
 
-            if experiment.specificity_control is not None:
-                comparisons[condition]["specificity_control"] = (
-                    statistics.compare_conditions(
-                        data[condition],
-                        data[experiment.specificity_control],
+                if has_specificity:
+                    comparisons[condition]["specificity_control"] = (
+                        statistics.compare_conditions(
+                            data[condition],
+                            data[experiment.specificity_control],
+                        )
                     )
-                )
+
+        else:
+            candidate_comparisons = statistics.compare_candidates(
+                data=data,
+                candidates=experiment.experimental_conditions,
+            )
 
         results[experiment.name] = {
             "descriptive": descriptive,
             "comparisons": comparisons,
+            "candidate_comparisons": candidate_comparisons,
         }
 
     return results
@@ -119,6 +132,27 @@ def apply_bh_correction(
 
         adjusted, significant = statistics.adjust_p_values(
             p_values,
+            alpha=alpha,
+        )
+
+        for comparison, p_adj, is_significant in zip(
+            comparisons, adjusted, significant
+        ):
+            comparison["adjusted_p_value"] = p_adj
+            comparison["significant"] = is_significant
+
+    # Correct candidate-to-candidate comparisons
+    for experiment_result in statistical_results.values():
+
+        candidate_comparisons = experiment_result["candidate_comparisons"]
+
+        if not candidate_comparisons:
+            continue
+
+        comparisons = list(candidate_comparisons.values())
+
+        adjusted, significant = statistics.adjust_p_values(
+            [comparison["p_value"] for comparison in comparisons],
             alpha=alpha,
         )
 
