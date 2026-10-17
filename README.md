@@ -75,7 +75,7 @@ EXPERIMENTS = [
         experimental_conditions=["SRE33"],
         positive_control="Rx + PVX-CP",
         negative_control="PTO",
-        specificity_control="PVX-CP",
+        specificity_controls=["PVX-CP"],
         source={
             "3": [
                 "Rx + CP",

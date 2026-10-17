@@ -1,15 +1,15 @@
 import pathlib
-from plate_analysis import entities
+from src.plate_analysis import config
 
 DATA_DIR = pathlib.Path("/file/path/to/your/infiltration/results")
 
 EXPERIMENTS = [
-    entities.ExperimentConfig(
+    config.ExperimentConfig(
         name="Candidate X × Effector A",
         experimental_conditions=["A"],
         positive_control="Rx + PVX-CP",
         negative_control="PTO",
-        specificity_control="PVX-CP",
+        specificity_controls=["PVX-CP"],
         normalisation="controls",
         source={
             "(plate_number)": [
@@ -28,10 +28,10 @@ EXPERIMENTS = [
     )
 ]
 
-RUN_1209 = entities.RunConfig(
+RUN_1209 = config.RunConfig(
     plate_map_path=DATA_DIR / "PCPs.xlsx",
     plates=[
-        entities.PlateInput(
+        config.PlateInput(
             plate_id="(plate_number)",
             intensities_path=DATA_DIR
             / ("Path/to/csv/with/chemiluminescence/intensities"),

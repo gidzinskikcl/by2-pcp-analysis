@@ -5,7 +5,7 @@ import numpy as np
 
 import pathlib
 
-from plate_analysis import entities
+from src.plate_analysis import config
 
 medianprops = {
     "color": "#333333",
@@ -14,7 +14,7 @@ medianprops = {
 
 
 def box_plot_experiments(
-    experiments_data: list[tuple[entities.ExperimentConfig, dict[str, list[float]]]],
+    experiments_data: list[tuple[config.ExperimentConfig, dict[str, list[float]]]],
     statistical_results: dict | None = None,
     save_individual: bool = False,
     output_dir: pathlib.Path = pathlib.Path("plots"),
@@ -255,9 +255,15 @@ def box_plot_conditions(
 #     ax.set_ylim(n - 0.5, -0.5)
 
 
-def _generate_colours(labels: list[str], controls: list[str] = []) -> dict[str, str]:
-    # Generate related colours for experimental conditions
-    experimental_colours = plt.cm.Set2.colors
+def _generate_colours(
+    labels: list[str],
+    controls: list[str] | None = None,
+) -> dict[str, str]:
+
+    if controls is None:
+        controls = []
+
+    experimental_colours = plt.get_cmap("Set2").colors
 
     colours = {}
     colour_index = 0
@@ -266,7 +272,9 @@ def _generate_colours(labels: list[str], controls: list[str] = []) -> dict[str, 
         if label in controls:
             colours[label] = "grey"
         else:
-            colours[label] = experimental_colours[colour_index]
+            colours[label] = experimental_colours[
+                colour_index % len(experimental_colours)
+            ]
             colour_index += 1
 
     return colours
@@ -301,7 +309,7 @@ def add_pvalue_bracket(
 
 def annotate_statistics(
     ax: plt.Axes,
-    experiment: entities.ExperimentConfig,
+    experiment: config.ExperimentConfig,
     data: dict[str, list[float]],
     comparisons: dict,
 ) -> None:
@@ -321,7 +329,6 @@ def annotate_statistics(
     data_max = float(np.max(all_values))
 
     span = max(data_max - data_min, 0.1)
-
     height = 0.04 * span
     spacing = 0.14 * span
 
@@ -331,14 +338,23 @@ def annotate_statistics(
         if condition not in comparisons:
             continue
 
-        for control_type, control_name in (
-            ("negative_control", experiment.negative_control),
-            ("specificity_control", experiment.specificity_control),
-        ):
-            if control_name is None:
-                continue
+        control_names = [
+            *(
+                [experiment.negative_control]
+                if experiment.negative_control is not None
+                else []
+            ),
+            *experiment.specificity_controls,
+        ]
 
-            comparison = comparisons[condition].get(control_type)
+        for control_name in control_names:
+            comparison_key = (
+                "negative_control"
+                if control_name == experiment.negative_control
+                else control_name
+            )
+
+            comparison = comparisons[condition].get(comparison_key)
 
             if comparison is None:
                 continue
@@ -350,7 +366,6 @@ def annotate_statistics(
 
             x1 = order.index(condition) + 1
             x2 = order.index(control_name) + 1
-
             y = data_max + spacing * (bracket_index + 1)
 
             add_pvalue_bracket(

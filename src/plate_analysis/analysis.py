@@ -1,9 +1,10 @@
-from plate_analysis import plate_map, fiji, statistics, utils, entities
+from plate_analysis import plate_map, fiji, statistics, utils
+from src.plate_analysis import config
 
 
 def analyse_run(
-    run: entities.RunConfig,
-) -> list[tuple[entities.ExperimentConfig, dict[str, list[float]]]]:
+    run: config.RunConfig,
+) -> list[tuple[config.ExperimentConfig, dict[str, list[float]]]]:
 
     plate_maps = plate_map.read_plate_maps(file_path=run.plate_map_path)
 
@@ -41,6 +42,11 @@ def analyse_run(
                     f"{experiment.name}: control normalisation "
                     "requires a negative control."
                 )
+            if experiment.positive_control is None:
+                raise ValueError(
+                    f"{experiment.name}: control normalisation "
+                    "requires a positive control."
+                )
 
             normalised = utils.normalise_to_controls(
                 data=labelled,
@@ -60,7 +66,7 @@ def analyse_run(
 
 
 def analyse_statistics(
-    experiments_data: list[tuple[entities.ExperimentConfig, dict[str, list[float]]]],
+    experiments_data: list[tuple[config.ExperimentConfig, dict[str, list[float]]]],
 ):
     results = {}
 
@@ -71,7 +77,7 @@ def analyse_statistics(
         candidate_comparisons = {}
 
         has_negative = experiment.negative_control is not None
-        has_specificity = experiment.specificity_control is not None
+        has_specificity = bool(experiment.specificity_controls)
 
         if has_negative or has_specificity:
 
@@ -81,17 +87,15 @@ def analyse_statistics(
                 if has_negative:
                     comparisons[condition]["negative_control"] = (
                         statistics.compare_conditions(
-                            data[condition],
-                            data[experiment.negative_control],
+                            experimental=data[condition],
+                            control=data[experiment.negative_control],
                         )
                     )
 
-                if has_specificity:
-                    comparisons[condition]["specificity_control"] = (
-                        statistics.compare_conditions(
-                            data[condition],
-                            data[experiment.specificity_control],
-                        )
+                for control in experiment.specificity_controls:
+                    comparisons[condition][control] = statistics.compare_conditions(
+                        experimental=data[condition],
+                        control=data[control],
                     )
 
         else:
@@ -114,24 +118,17 @@ def apply_bh_correction(
     alpha: float = 0.05,
 ) -> None:
 
-    # Separate families of comparisons
-    for control_type in ("negative_control", "specificity_control"):
-
-        comparisons = []
-
-        for experiment_result in statistical_results.values():
-            for condition_result in experiment_result["comparisons"].values():
-
-                if control_type in condition_result:
-                    comparisons.append(condition_result[control_type])
-
-        if not comparisons:
-            continue
-
-        p_values = [comparison["p_value"] for comparison in comparisons]
+    # Candidate-versus-control comparisons
+    comparisons = [
+        comparison
+        for result in statistical_results.values()
+        for condition_result in result["comparisons"].values()
+        for comparison in condition_result.values()
+    ]
+    if comparisons:
 
         adjusted, significant = statistics.adjust_p_values(
-            p_values,
+            [comparison["p_value"] for comparison in comparisons],
             alpha=alpha,
         )
 
@@ -141,15 +138,13 @@ def apply_bh_correction(
             comparison["adjusted_p_value"] = p_adj
             comparison["significant"] = is_significant
 
-    # Correct candidate-to-candidate comparisons
-    for experiment_result in statistical_results.values():
+    # Candidate-versus-candidate comparisons
+    for result in statistical_results.values():
 
-        candidate_comparisons = experiment_result["candidate_comparisons"]
+        comparisons = list(result["candidate_comparisons"].values())
 
-        if not candidate_comparisons:
+        if not comparisons:
             continue
-
-        comparisons = list(candidate_comparisons.values())
 
         adjusted, significant = statistics.adjust_p_values(
             [comparison["p_value"] for comparison in comparisons],
